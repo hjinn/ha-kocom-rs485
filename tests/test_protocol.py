@@ -9,7 +9,9 @@ from custom_components.kocom_rs485.protocol import (
     InvalidPacket,
     Kind,
     Packet,
+    ThermoMode,
     ThermoState,
+    UnknownThermoValue,
     thermo_command,
     thermo,
 )
@@ -97,18 +99,30 @@ def test_framer_splits_merged_packets():
     assert Framer().feed(REAL + REAL) == [Packet.from_bytes(REAL)] * 2
 
 
+# Values captured from the real controller (captures/01-05, 2026-10-21) and
+# matched to what the room thermostat displayed.
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
         pytest.param(
-            "1100180016000000",
-            ThermoState(heating=True, away=False, target_temp=24, current_temp=22),
-            id="heating 24, room 22",
+            "1100180019000000",
+            ThermoState(ThermoMode.HEAT, target_temp=24, current_temp=25),
+            id="heat 24 (set on thermostat)",
         ),
         pytest.param(
-            "0101140013000000",
-            ThermoState(heating=False, away=True, target_temp=20, current_temp=19),
-            id="off and away, room 19",
+            "11010a0019000000",
+            ThermoState(ThermoMode.AWAY, target_temp=None, current_temp=25),
+            id="away (away button)",
+        ),
+        pytest.param(
+            "11010a001a000000",
+            ThermoState(ThermoMode.AWAY, target_temp=None, current_temp=26),
+            id="away, other room at 26",
+        ),
+        pytest.param(
+            "00010a0019000000",
+            ThermoState(ThermoMode.OFF, target_temp=None, current_temp=25),
+            id="off (thermostat showed off)",
         ),
     ],
 )
@@ -117,14 +131,29 @@ def test_decodes_thermo_state(value, expected):
 
 
 @pytest.mark.parametrize(
-    ("heating", "target_temp", "expected"),
+    "value",
     [
-        pytest.param(True, 24, "1100180000000000", id="heat at 24"),
-        pytest.param(False, 23, "0100170000000000", id="off keeping 23"),
+        pytest.param("0100180000000000", id="byte 0 = 01 (our off command, never reported)"),
+        pytest.param("2100180019000000", id="byte 0 unknown"),
+        pytest.param("1102180019000000", id="byte 1 unknown"),
     ],
 )
-def test_encodes_thermo_command(heating, target_temp, expected):
-    assert thermo_command(heating, target_temp) == bytes.fromhex(expected)
+def test_rejects_unobserved_thermo_value(value):
+    with pytest.raises(UnknownThermoValue):
+        ThermoState.decode(bytes.fromhex(value))
+
+
+# Command values sent in captures/07-away and accepted by the real controller.
+@pytest.mark.parametrize(
+    ("mode", "target_temp", "expected"),
+    [
+        pytest.param(ThermoMode.HEAT, 24, "1100180000000000", id="heat at 24"),
+        pytest.param(ThermoMode.OFF, 24, "0100180000000000", id="off keeping 24"),
+        pytest.param(ThermoMode.AWAY, None, "11010a0000000000", id="away"),
+    ],
+)
+def test_encodes_thermo_command(mode, target_temp, expected):
+    assert thermo_command(mode, target_temp) == bytes.fromhex(expected)
 
 
 def test_ack_of_master_query_comes_from_thermo():
@@ -151,3 +180,9 @@ def test_ack_of_thermo_report_keeps_seq_and_value():
         cmd=0x00,
         value=bytes.fromhex("0100140013000000"),
     )
+
+
+@pytest.mark.parametrize("mode", [ThermoMode.HEAT, ThermoMode.OFF])
+def test_thermo_command_needs_target_temp_unless_away(mode):
+    with pytest.raises(ValueError):
+        thermo_command(mode)

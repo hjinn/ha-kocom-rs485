@@ -125,27 +125,53 @@ class Framer:
 
 
 HEAT = 0x11
-OFF = 0x01
+OFF = 0x01  # sent to switch off; the controller then reports byte 0 as 0x00
 AWAY = 0x01
+
+
+class UnknownThermoValue(ValueError):
+    """Raised for thermo values never observed on the real controller."""
+
+
+class ThermoMode(Enum):
+    OFF = "off"
+    HEAT = "heat"
+    AWAY = "away"
 
 
 @dataclass(frozen=True)
 class ThermoState:
-    heating: bool
-    away: bool
-    target_temp: int  # also reported while off; meaning then is unverified
+    mode: ThermoMode
+    target_temp: int | None  # only while heating; off/away report a fixed 10
     current_temp: int
 
     @classmethod
     def decode(cls, value: bytes) -> ThermoState:
+        if value[0] not in (0x00, HEAT) or value[1] not in (0x00, AWAY):
+            raise UnknownThermoValue(f"unobserved thermo value {value.hex()}")
+        if value[0] == 0x00:
+            mode = ThermoMode.OFF
+        elif value[1] == AWAY:
+            mode = ThermoMode.AWAY
+        else:
+            mode = ThermoMode.HEAT
         return cls(
-            heating=value[0] == HEAT,
-            away=value[1] == AWAY,
-            target_temp=value[2],
+            mode=mode,
+            target_temp=value[2] if mode is ThermoMode.HEAT else None,
             current_temp=value[4],
         )
 
 
-def thermo_command(heating: bool, target_temp: int) -> bytes:
-    """Value for a STATE command to a thermo. Always sends 'not away'."""
-    return bytes([HEAT if heating else OFF, 0x00, target_temp]) + bytes(5)
+AWAY_TEMP = 0x0A  # what the controller reports and accepts for away
+
+
+def thermo_command(mode: ThermoMode, target_temp: int | None = None) -> bytes:
+    """Value for a STATE command to a thermo (formats verified on hardware).
+
+    HEAT and OFF carry the target temperature; AWAY uses the fixed away value.
+    """
+    if mode is ThermoMode.AWAY:
+        return bytes([HEAT, AWAY, AWAY_TEMP]) + bytes(5)
+    if target_temp is None:
+        raise ValueError(f"{mode.value} needs a target temperature")
+    return bytes([HEAT if mode is ThermoMode.HEAT else OFF, 0x00, target_temp]) + bytes(5)

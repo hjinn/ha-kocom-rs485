@@ -59,7 +59,50 @@ python3 tools/probe.py <EW11_IP> -o captures/05-cmd.log --ack heat 0 <원래설�
 
 **판단 포인트:** 응답 값의 바이트 2(설정 온도)·0(모드)이 명령대로 바뀌는가, off일 때 바이트 2가 유지되는가, 실제 보일러가 반응하는가.
 
+## 단계 5 — 명령 되돌림 재현 (보일러 상태가 바뀜)
+
+`05-cmd`에서 꺼짐 → 난방 명령이 2.8초 뒤 저절로 꺼짐으로 되돌아갔다. 원인 후보:
+
+| 가설 | 내용 | 갈리는 실험 |
+|---|---|---|
+| H1 | ③ 보고에 ④ ACK가 없어서 온도조절기/Controller가 원래 상태를 다시 주장 | 5-2에서 되돌림이 사라짐 |
+| H2 | 꺼짐 상태에서는 원격 켜기를 거부 | 5-1, 5-2 모두 되돌림, 5-3은 유지 |
+| H3 | 우연 (재현 안 됨) | 5-1에서 되돌림 없음 |
+
+각 실험 사이에 **30초** 쉬고, 각 실험 중 **온도조절기 화면 변화**를 메모해 둔다.
+
+```sh
+# 5-1  꺼짐 → 난방, ACK 없이 (05 재현)
+python3 tools/probe.py <EW11_IP> -o captures/06-revert.log off 0 23
+python3 tools/probe.py <EW11_IP> -o captures/06-revert.log --listen 30 heat 0 24
+
+# 5-2  꺼짐 → 난방, ACK 보냄
+python3 tools/probe.py <EW11_IP> -o captures/06-revert.log --ack off 0 23
+python3 tools/probe.py <EW11_IP> -o captures/06-revert.log --ack --listen 30 heat 0 24
+
+# 5-3  난방 → 다른 온도, ACK 보냄 (대조군)
+python3 tools/probe.py <EW11_IP> -o captures/06-revert.log --ack --listen 30 heat 0 25
+```
+
+끝나면 온도조절기에서 원래 상태(외출)로 되돌린다.
+
+## 단계 6 — 외출 켜기 (보일러 상태가 바뀜)
+
+온도조절기가 외출일 때 보고하는 값 `11 01 0a`를 그대로 명령으로 보낸다. 모두 `--ack` 사용 (ADR-0014). 실험 사이 30초 휴식, **온도조절기 화면 변화를 메모**.
+
+```sh
+# 6-1  난방 상태로 맞춰 두기
+python3 tools/probe.py <EW11_IP> -o captures/07-away.log --ack heat 0 24
+# 6-2  외출 켜기
+python3 tools/probe.py <EW11_IP> -o captures/07-away.log --ack --listen 30 away 0
+# 6-3  꺼짐 → 외출 (꺼진 방에서도 되는가)
+python3 tools/probe.py <EW11_IP> -o captures/07-away.log --ack off 0 24
+python3 tools/probe.py <EW11_IP> -o captures/07-away.log --ack --listen 30 away 0
+```
+
+**판단 포인트:** 6-2, 6-3에서 ③ Report가 `11 01 0a`인가, 온도조절기 화면이 외출로 바뀌는가, 30초 동안 유지되는가.
+끝나면 온도조절기에서 원래 상태로 되돌린다.
+
 ## 아직 이 도구로 확인할 수 없는 것
 
-- 외출 송신 형식: 외출을 설정할 수 있는 장비(월패드)가 버스에 없다. Relay 프로젝트 이후로 미룬다.
 - 허용 온도 범위: 범위 밖 값을 보내 보는 것은 Controller 반응을 모르므로 지금은 하지 않는다.

@@ -1,0 +1,13 @@
+{
+  "domain": "kocom_rs485",
+  "name": "Kocom RS485",
+  "codeowners": ["@hjinn"],
+  "config_flow": false,
+  "dependencies": [],
+  "documentation": "https://github.com/hjinn/ha-kocom-rs485",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/hjinn/ha-kocom-rs485/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

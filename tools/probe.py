@@ -12,6 +12,7 @@ Actions:
     query ROOM           query one room (read-only)
     heat ROOM TEMP       turn heating on at TEMP ℃   (changes boiler state)
     off ROOM TEMP        turn heating off, keeping TEMP (changes boiler state)
+    away ROOM            switch to away (11 01 0a, as the thermostat reports it)
 
 ROOM is the thermo sub id: 0 livingroom, 1 bedroom, 2 room1, 3 room2.
 --ack makes the probe acknowledge state reports sent by a thermo to the
@@ -107,7 +108,9 @@ class Probe:
         return False
 
 
-def value_for(mode: str, temp: int) -> str:
+def value_for(mode: str, temp: int | None) -> str:
+    if mode == "away":
+        return "11010a" + "00" * 5  # same bytes the thermostat reports when away
     return {"heat": "11", "off": "01"}[mode] + "00" + f"{temp:02x}" + "00" * 5
 
 
@@ -118,7 +121,7 @@ def main() -> None:
     parser.add_argument("--ack", action="store_true", help="acknowledge thermo state reports as the Master")
     parser.add_argument("--listen", type=float, default=10, help="seconds to keep listening after the action (default 10)")
     parser.add_argument("-o", "--output", help="append log lines to this file")
-    parser.add_argument("action", choices=["scan", "query", "heat", "off"])
+    parser.add_argument("action", choices=["scan", "query", "heat", "off", "away"])
     parser.add_argument("room", type=int, nargs="?", choices=range(4))
     parser.add_argument("temp", type=int, nargs="?")
     args = parser.parse_args()
