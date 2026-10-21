@@ -82,8 +82,15 @@ class Master:
             _LOGGER.warning("ignoring report from room %s: unobserved value %s", room, packet.value.hex())
             return
         self._on_report(room, state)
-        if self._report is not None and not self._report.done() and room == self._room:
-            self._acked.set()  # a report before the ack also proves the request arrived
+        # only a report after the thermo acked our request is its answer; one
+        # before it is a resend of something older (the real thermo always
+        # acks at ~125ms and reports at ~300ms, docs/protocol.md)
+        if (
+            self._report is not None
+            and not self._report.done()
+            and room == self._room
+            and self._acked.is_set()
+        ):
             self._report.set_result(state)
 
     def _send_soon(self, packet: Packet) -> None:

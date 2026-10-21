@@ -57,6 +57,10 @@ class TcpTransport:
         self._task: asyncio.Task | None = None
 
     @property
+    def endpoint(self) -> str:
+        return f"{self._host}:{self._port}"
+
+    @property
     def connected(self) -> bool:
         return self._writer is not None
 

@@ -194,3 +194,16 @@ async def test_close_waits_until_pending_acks_are_written(make_master):
     # connection, or the thermo rolls the command back (ADR-0014); the slow
     # write means the thermo resent its report meanwhile, all get acked
     assert fake.acks_to(0)
+
+
+async def test_stale_report_before_ack_is_not_taken_as_the_result(make_master):
+    master, fake = make_master({0: "00010a0019000000"}, deaf_for=1)  # off; first try lost
+
+    pending = asyncio.create_task(master.command(0, ThermoMode.HEAT, 24))
+    await asyncio.sleep(STEP)
+    # a resend of an earlier "off" report arrives before the thermo acked the command
+    stale = Packet(Kind.SEND, 2, MASTER, thermo(0), Cmd.STATE, bytes.fromhex("00010a0019000000"))
+    master.feed(stale.to_bytes())
+    state = await pending
+
+    assert state == ThermoState(ThermoMode.HEAT, target_temp=24, current_temp=25)

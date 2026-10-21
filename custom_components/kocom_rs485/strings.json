@@ -34,5 +34,21 @@
         "3": "Room 2"
       }
     }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "Room {room} did not respond to the command."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "description": "How often current temperatures are read. State changes show up immediately regardless of this.",
+        "data": {
+          "scan_interval": "Polling interval"
+        }
+      }
+    }
   }
 }

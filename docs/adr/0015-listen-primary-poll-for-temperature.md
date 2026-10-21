@@ -12,7 +12,8 @@ ADR-0012는 "버스에 먼저 말하는 장비가 없다"는 가정에서 Pollin
 ## 결정
 - `iot_class: local_push`. 수신한 Report는 즉시 Room 상태에 반영한다 (ACK는 ADR-0014).
 - Polling은 유지: 기본 60초, 옵션 15~3600초, Room 간 1초 간격. 목적은 현재 온도 갱신과 연결 공백 중 누락 보정.
-- **캐시 규칙**: 최근 Polling 주기 안에 Report를 받은 Room은 그 회차 query를 건너뛴다.
+- **캐시 규칙**: 최근 Polling 주기 안에 **상태를 바꾼** Report를 받은 Room은 그 회차 query를 건너뛴다. (2026-10-22 구체화: 우리 query에 대한 응답의 재송신처럼 상태가 같은 Report까지 세면, 응답 직후 재송신 때문에 다음 Polling이 건너뛰어진다.)
+- Report 수신은 리스너만 갱신하고 Polling 일정은 건드리지 않는다. 일정을 늦추면 Report가 잦은 집에서 다른 방의 현재 온도가 갱신되지 않는다.
 - 재연결 직후에는 캐시와 무관하게 전체 query.
 - 명령 직후 즉시 query는 하지 않는다: ③ Report가 곧 결과다 (ADR-0006/0012의 "명령 후 즉시 query"를 대체).
 - 연결 끊김 감지(ADR-0013, Polling × 3)는 유지. Polling이 계속 돌므로 기준이 유효하다.

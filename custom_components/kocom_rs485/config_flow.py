@@ -4,15 +4,32 @@ from __future__ import annotations
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlowWithReload,
+)
+from homeassistant.core import callback
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.helpers.selector import (
+    NumberSelector,
+    NumberSelectorConfig,
+    NumberSelectorMode,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
 )
 
-from .const import CONF_ROOMS, DEFAULT_PORT, DOMAIN
+from .const import (
+    CONF_ROOMS,
+    CONF_SCAN_INTERVAL,
+    DEFAULT_PORT,
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    MAX_SCAN_INTERVAL,
+    MIN_SCAN_INTERVAL,
+)
 from .discovery import ROOMS, CannotConnect, discover_rooms
 
 USER_SCHEMA = vol.Schema(
@@ -32,8 +49,27 @@ ROOM_SELECTOR = SelectSelector(
 )
 
 
+SCAN_INTERVAL_SELECTOR = vol.All(
+    NumberSelector(
+        NumberSelectorConfig(
+            min=MIN_SCAN_INTERVAL,
+            max=MAX_SCAN_INTERVAL,
+            step=1,
+            unit_of_measurement="s",
+            mode=NumberSelectorMode.BOX,
+        )
+    ),
+    vol.Coerce(int),
+)
+
+
 class KocomRs485ConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> KocomRs485OptionsFlow:
+        return KocomRs485OptionsFlow()
 
     def __init__(self) -> None:
         self._host = ""
@@ -81,4 +117,19 @@ class KocomRs485ConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=schema,
             errors=errors,
             description_placeholders={"found": str(len(self._found))},
+        )
+
+
+class KocomRs485OptionsFlow(OptionsFlowWithReload):
+    """Polling interval (ADR-0015); saving reloads the entry."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        current = self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {vol.Required(CONF_SCAN_INTERVAL, default=current): SCAN_INTERVAL_SELECTOR}
+            ),
         )

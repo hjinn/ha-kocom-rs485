@@ -34,5 +34,21 @@
         "3": "방2"
       }
     }
+  },
+  "exceptions": {
+    "command_failed": {
+      "message": "방 {room}이(가) 명령에 응답하지 않았습니다."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "폴링",
+        "description": "현재 온도를 읽어 오는 주기입니다. 상태 변경은 즉시 반영되므로 이 값과 무관합니다.",
+        "data": {
+          "scan_interval": "폴링 주기"
+        }
+      }
+    }
   }
 }

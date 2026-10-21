@@ -69,6 +69,8 @@ class FakeThermo:
     async def report(self, room: int) -> None:
         """Send the room state like the real controller: seq 1, then 2 and 3 if not acked."""
         for seq in (1, 2, 3):
+            if room not in self.rooms:  # removed by the test meanwhile
+                return
             packet = Packet(Kind.SEND, seq, MASTER, thermo(room), Cmd.STATE, self.rooms[room])
             self._unacked[room] = packet
             self.emit(packet.to_bytes())
@@ -111,6 +113,11 @@ class FakeEw11Controller:
         while data := await reader.read(256):
             for packet in framer.feed(data):
                 self.thermo.receive(packet)
+
+    def drop_connection(self) -> None:
+        """Close the client connection, like an EW11 restarting its TCP server."""
+        for writer in self._writers:
+            writer.close()
 
     async def stop(self) -> None:
         await self.thermo.stop()

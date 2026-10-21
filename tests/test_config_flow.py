@@ -7,6 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.kocom_rs485 as kocom_rs485
 from custom_components.kocom_rs485 import config_flow, discovery
 from custom_components.kocom_rs485.const import DOMAIN
 
@@ -21,6 +22,16 @@ FAST = {"connect_timeout": 0.3, "initial_quiet": 0, "ack_timeout": 0.05, "report
 def fast_discovery(monkeypatch):
     """Real discovery over TCP, only with test-sized timeouts."""
     monkeypatch.setattr(config_flow, "discover_rooms", partial(discovery.discover_rooms, **FAST))
+
+
+@pytest.fixture(autouse=True)
+def skip_entry_setup(monkeypatch):
+    """The flow is under test here, not what happens after the entry exists."""
+
+    async def setup_entry(hass, entry):
+        return True
+
+    monkeypatch.setattr(kocom_rs485, "async_setup_entry", setup_entry)
 
 
 @pytest.fixture
