@@ -37,7 +37,7 @@
   },
   "exceptions": {
     "command_failed": {
-      "message": "방 {room}이(가) 명령에 응답하지 않았습니다."
+      "message": "{room}이(가) 명령에 응답하지 않았습니다."
     }
   },
   "options": {
@@ -49,6 +49,27 @@
           "scan_interval": "폴링 주기"
         }
       }
+    }
+  },
+  "entity": {
+    "climate": {
+      "livingroom": {
+        "name": "거실"
+      },
+      "bedroom": {
+        "name": "안방"
+      },
+      "room1": {
+        "name": "방1"
+      },
+      "room2": {
+        "name": "방2"
+      }
+    }
+  },
+  "device": {
+    "heater": {
+      "name": "난방"
     }
   }
 }

@@ -8,52 +8,14 @@ from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from homeassistant.exceptions import HomeAssistantError
 from datetime import timedelta
 
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.kocom_rs485 import coordinator as coordinator_module
-from custom_components.kocom_rs485.const import DOMAIN
 from custom_components.kocom_rs485.protocol import Cmd, Kind, ThermoMode, ThermoState, thermo
 
 from .fakes import FakeEw11Controller
+from .helpers import eventually, setup_entry
 
-pytestmark = pytest.mark.usefixtures("socket_enabled")
-
-
-@pytest.fixture(autouse=True)
-def fast_bus(monkeypatch):
-    """Test-sized bus timings; behaviour is unchanged."""
-    monkeypatch.setattr(
-        coordinator_module,
-        "TRANSPORT_OPTIONS",
-        {"initial_quiet": 0, "connect_timeout": 0.3, "delays": lambda attempt: 0.05},
-    )
-    monkeypatch.setattr(coordinator_module, "MASTER_OPTIONS", {"ack_timeout": 0.05, "report_timeout": 0.2})
-    monkeypatch.setattr(coordinator_module, "CONNECT_TIMEOUT", 0.3)
-
-
-@pytest.fixture
-async def controller():
-    fakes: list[FakeEw11Controller] = []
-
-    async def start(rooms: dict[int, str]) -> FakeEw11Controller:
-        fake = FakeEw11Controller(rooms)
-        await fake.start()
-        fakes.append(fake)
-        return fake
-
-    yield start
-    for fake in fakes:
-        await fake.stop()
-
-
-async def eventually(predicate, timeout: float = 2.0) -> None:
-    # counts iterations instead of reading a clock: under `freezer` the
-    # test's view of time.monotonic is frozen
-    for _ in range(int(timeout / 0.01)):
-        if predicate():
-            return
-        await asyncio.sleep(0.01)
-    raise AssertionError("condition not met in time")
+pytestmark = pytest.mark.usefixtures("socket_enabled", "fast_bus")
 
 
 def queried_rooms(fake: FakeEw11Controller, since: int = 0) -> list[int]:
@@ -68,19 +30,6 @@ async def advance(hass: HomeAssistant, freezer, seconds: float) -> None:
     freezer.tick(timedelta(seconds=seconds))
     async_fire_time_changed(hass)
     await hass.async_block_till_done()
-
-
-async def setup_entry(hass: HomeAssistant, port: int, rooms: list[int], options: dict | None = None):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        unique_id=f"127.0.0.1:{port}",
-        data={"host": "127.0.0.1", "port": port, "rooms": rooms},
-        options=options or {},
-    )
-    entry.add_to_hass(hass)
-    await hass.config_entries.async_setup(entry.entry_id)
-    await hass.async_block_till_done()
-    return entry
 
 
 async def test_setup_queries_rooms_and_fills_state(hass: HomeAssistant, controller):

@@ -15,6 +15,7 @@ Home Assistant에서 코콤(Kocom) 월패드의 RS485 버스를 통해 난방을
 | **Transport** | Integration과 EW11 사이의 바이트 스트림 연결. v1은 TCP 소켓 구현만 존재한다. | → ADR-0002 |
 | **Thermo** | 방별 난방 온도조절기. 장치 코드 `0x36`. 상태: **ThermoMode**(꺼짐/난방/외출 중 하나), 설정 온도(난방일 때만), 현재 온도. HA `climate` 엔티티 1개에 대응. | "보일러"라는 장치는 프로토콜에 없음. → ADR-0003 |
 | **Away** | 외출. ThermoMode의 한 값 (바이트 0 `11` + 바이트 1 `01`). 독립 플래그가 아니다: 꺼짐도 바이트 1이 `01`로 보고된다. 온도조절기의 외출 버튼으로 설정. | HA에서는 preset `away` (ADR-0016) |
+| **Heater 엔티티** | Room 하나에 대응하는 HA `climate` 엔티티. ID `climate.heater_<livingroom\|bedroom\|room1\|room2>`, 화면 이름 "난방 거실" 등. | ADR-0016, ADR-0017 |
 | **Room** | Thermo가 설치된 공간. 서브 ID `00` livingroom, `01` bedroom, `02` room1, `03` room2. 기본 표시 이름: 거실, 안방, 방1, 방2. | 설치 시 자동 탐지 → ADR-0004 |
 | **Report** | Thermo → Master 방향 send 패킷(cmd `00`)으로 Room의 현재 상태를 싣는다. 명령·query 직후(③) 또는 온도조절기 조작 시 자발적으로 온다. Master가 ACK하지 않으면 2회 재송신하고, Master 명령에 대한 보고였다면 약 3초 뒤 명령을 되돌린다. Integration은 모든 Report에 ACK한다. | ADR-0014 |
 | **Polling** | Integration이 Master로서 Thermo에 query를 보내 상태를 확인하는 것. 기본 60초. 현재 온도 갱신과 누락 보정용이며, 상태 변화는 감청(Report 수신)이 주 수단. 최근 Report를 받은 Room은 건너뛴다. | → ADR-0015 |

@@ -3,26 +3,9 @@ import pytest
 
 from custom_components.kocom_rs485.discovery import CannotConnect, discover_rooms
 
-from .fakes import FakeEw11Controller
-
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
 FAST = {"initial_quiet": 0, "ack_timeout": 0.05, "report_timeout": 0.2}
-
-
-@pytest.fixture
-async def controller():
-    fakes: list[FakeEw11Controller] = []
-
-    async def start(rooms: dict[int, str]) -> FakeEw11Controller:
-        fake = FakeEw11Controller(rooms)
-        await fake.start()
-        fakes.append(fake)
-        return fake
-
-    yield start
-    for fake in fakes:
-        await fake.stop()
 
 
 async def test_finds_the_rooms_that_answer(controller):

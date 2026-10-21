@@ -110,9 +110,12 @@ class FakeEw11Controller:
         self._writers.append(writer)
         self.thermo.emit = writer.write
         framer = Framer()
-        while data := await reader.read(256):
-            for packet in framer.feed(data):
-                self.thermo.receive(packet)
+        try:
+            while data := await reader.read(256):
+                for packet in framer.feed(data):
+                    self.thermo.receive(packet)
+        except ConnectionError:
+            pass  # the client went away mid-exchange, e.g. unloaded during a poll
 
     def drop_connection(self) -> None:
         """Close the client connection, like an EW11 restarting its TCP server."""

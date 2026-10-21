@@ -11,8 +11,6 @@ import custom_components.kocom_rs485 as kocom_rs485
 from custom_components.kocom_rs485 import config_flow, discovery
 from custom_components.kocom_rs485.const import DOMAIN
 
-from .fakes import FakeEw11Controller
-
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
 FAST = {"connect_timeout": 0.3, "initial_quiet": 0, "ack_timeout": 0.05, "report_timeout": 0.2}
@@ -32,21 +30,6 @@ def skip_entry_setup(monkeypatch):
         return True
 
     monkeypatch.setattr(kocom_rs485, "async_setup_entry", setup_entry)
-
-
-@pytest.fixture
-async def controller():
-    fakes: list[FakeEw11Controller] = []
-
-    async def start(rooms: dict[int, str]) -> FakeEw11Controller:
-        fake = FakeEw11Controller(rooms)
-        await fake.start()
-        fakes.append(fake)
-        return fake
-
-    yield start
-    for fake in fakes:
-        await fake.stop()
 
 
 def defaults(result) -> dict:
