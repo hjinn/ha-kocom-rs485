@@ -1,15 +1,9 @@
-"""Tests for the Master request/ack/report engine, against a fake thermo.
-
-The fake reproduces what the real controller did in captures/02-07
-(docs/protocol.md): it acks every request, then reports the room state,
-and repeats an un-acked report with seq 2 and 3.
-"""
+"""Tests for the Master request/ack/report engine, against a fake thermo."""
 import asyncio
 
 import pytest
 
 from custom_components.kocom_rs485.master import Master, NoResponse
-from custom_components.kocom_rs485.transport import TransportNotConnected
 from custom_components.kocom_rs485.protocol import (
     MASTER,
     Cmd,
@@ -20,76 +14,15 @@ from custom_components.kocom_rs485.protocol import (
     thermo,
 )
 
+from .fakes import STEP, FakeThermo
+
 FAST = {"ack_timeout": 0.05, "report_timeout": 0.2}
-STEP = 0.005  # fake thermo reaction time
-
-
-def report_value(command: bytes, current: bytes) -> bytes:
-    """What the real controller reports after a STATE command (captures/05-07)."""
-    if command[0] == 0x01:
-        return bytes.fromhex("00010a") + current[3:]
-    if command[1] == 0x01:
-        return bytes.fromhex("11010a") + current[3:]
-    return command[:3] + current[3:]
-
-
-class FakeThermo:
-    def __init__(self, rooms: dict[int, str], deaf_for: int = 0) -> None:
-        self.rooms = {room: bytes.fromhex(value) for room, value in rooms.items()}
-        self.deaf_for = deaf_for  # ignore this many requests, like a collision on the bus
-        self.lose_acks = False  # pretend the Master's acks never arrive
-        self.connected = True
-        self.sent: list[Packet] = []  # everything the Master wrote
-        self.master: Master | None = None
-        self._unacked: dict[int, Packet] = {}
-        self._tasks: set[asyncio.Task] = set()
-
-    async def write(self, data: bytes) -> None:
-        if not self.connected:
-            raise TransportNotConnected("EW11 gone")
-        packet = Packet.from_bytes(data)
-        self.sent.append(packet)
-        if packet.kind is Kind.ACK:
-            if not self.lose_acks:
-                self._unacked.pop(packet.dest.sub, None)
-            return
-        room = packet.dest.sub
-        if packet.dest.device != thermo(0).device or room not in self.rooms:
-            return
-        if self.deaf_for:
-            self.deaf_for -= 1
-            return
-        if packet.cmd == Cmd.STATE:
-            self.rooms[room] = report_value(packet.value, self.rooms[room])
-        self._later(self._answer(packet, room))
-
-    async def _answer(self, request: Packet, room: int) -> None:
-        await asyncio.sleep(STEP)
-        self.master.feed(request.ack().to_bytes())
-        await asyncio.sleep(STEP)
-        await self.report(room)
-
-    async def report(self, room: int) -> None:
-        """Send the room state like the real controller: seq 1, then 2 and 3 if not acked."""
-        for seq in (1, 2, 3):
-            packet = Packet(Kind.SEND, seq, MASTER, thermo(room), Cmd.STATE, self.rooms[room])
-            self._unacked[room] = packet
-            self.master.feed(packet.to_bytes())
-            await asyncio.sleep(STEP * 4)
-            if room not in self._unacked:
-                return
-
-    def _later(self, coro) -> None:
-        task = asyncio.create_task(coro)
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
-
-    def acks_to(self, room: int) -> list[Packet]:
-        return [p for p in self.sent if p.kind is Kind.ACK and p.dest == thermo(room)]
 
 
 @pytest.fixture
-def make_master():
+async def make_master():
+    fakes: list[FakeThermo] = []
+
     def make(
         rooms: dict[int, str], reports: list | None = None, deaf_for: int = 0, **kwargs
     ) -> tuple[Master, FakeThermo]:
@@ -99,10 +32,14 @@ def make_master():
             on_report=lambda room, state: reports.append((room, state)) if reports is not None else None,
             **{**FAST, **kwargs},
         )
-        fake.master = master
+        fake.emit = master.feed
+        fakes.append(fake)
         return master, fake
 
-    return make
+    yield make
+    for fake in fakes:
+        await fake.stop()
+    await asyncio.sleep(0)  # let the Master's last ack writes finish
 
 
 async def test_query_returns_reported_state_and_acks_the_report(make_master):
@@ -244,3 +181,16 @@ async def test_unknown_report_value_is_acked_logged_and_skipped(make_master, cap
     assert reports == [(1, ThermoState(ThermoMode.AWAY, None, 26))]
     assert len(fake.acks_to(0)) == 1
     assert "2100180019000000" in caplog.text
+
+
+async def test_close_waits_until_pending_acks_are_written(make_master):
+    master, fake = make_master({0: "00010a0019000000"})
+    fake.write_delay = 0.05
+
+    await master.command(0, ThermoMode.HEAT, 24)  # returns as soon as the report arrives
+    await master.close()
+
+    # the report's ack must be on the bus before the caller can drop the
+    # connection, or the thermo rolls the command back (ADR-0014); the slow
+    # write means the thermo resent its report meanwhile, all get acked
+    assert fake.acks_to(0)

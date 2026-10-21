@@ -68,6 +68,11 @@ class Master:
             self._report.set_exception(NoResponse("connection to the EW11 lost"))
             self._acked.set()  # wake the ack wait; the report wait then raises
 
+    async def close(self) -> None:
+        """Wait until acks already queued are written; call before dropping the connection."""
+        while self._tasks:  # a resent report may queue another ack meanwhile
+            await asyncio.gather(*self._tasks, return_exceptions=True)
+
     def _handle_report(self, packet: Packet) -> None:
         self._send_soon(packet.ack())
         room = packet.src.sub

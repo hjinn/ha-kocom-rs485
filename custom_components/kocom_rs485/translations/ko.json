@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "EW11 연결",
+        "description": "보일러 컨트롤러의 RS485 버스에 연결된 Elfin EW11의 주소입니다 (TCP 서버 모드).",
+        "data": {
+          "host": "호스트",
+          "port": "포트"
+        }
+      },
+      "rooms": {
+        "title": "방 선택",
+        "description": "{found}개 방이 응답해 미리 선택했습니다. 추가할 방을 고르세요.",
+        "data": {
+          "rooms": "방"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "EW11에 연결할 수 없습니다. 주소와 TCP 서버 동작 여부를 확인하세요.",
+      "no_rooms": "방을 하나 이상 선택하세요."
+    },
+    "abort": {
+      "already_configured": "이미 등록된 EW11입니다."
+    }
+  },
+  "selector": {
+    "room": {
+      "options": {
+        "0": "거실",
+        "1": "안방",
+        "2": "방1",
+        "3": "방2"
+      }
+    }
+  }
+}

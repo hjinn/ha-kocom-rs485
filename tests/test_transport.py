@@ -11,6 +11,10 @@ from custom_components.kocom_rs485.transport import (
     reconnect_delay,
 )
 
+# these tests talk to a real localhost server; the HA test harness blocks
+# sockets unless a test opts in
+pytestmark = pytest.mark.usefixtures("socket_enabled")
+
 
 class FakeEw11:
     """A localhost TCP server standing in for the EW11."""

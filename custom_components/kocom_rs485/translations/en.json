@@ -1,0 +1,38 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the EW11",
+        "description": "Address of the Elfin EW11 attached to the boiler controller's RS485 bus (TCP server mode).",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
+      "rooms": {
+        "title": "Rooms",
+        "description": "{found} room(s) answered and are preselected. Choose the rooms to add.",
+        "data": {
+          "rooms": "Rooms"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the EW11. Check the address and that its TCP server is running.",
+      "no_rooms": "Select at least one room."
+    },
+    "abort": {
+      "already_configured": "This EW11 is already configured."
+    }
+  },
+  "selector": {
+    "room": {
+      "options": {
+        "0": "Living room",
+        "1": "Bedroom",
+        "2": "Room 1",
+        "3": "Room 2"
+      }
+    }
+  }
+}

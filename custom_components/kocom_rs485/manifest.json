@@ -2,7 +2,7 @@
   "domain": "kocom_rs485",
   "name": "Kocom RS485",
   "codeowners": ["@hjinn"],
-  "config_flow": false,
+  "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/hjinn/ha-kocom-rs485",
   "integration_type": "hub",
