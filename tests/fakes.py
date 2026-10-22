@@ -31,6 +31,10 @@ class FakeThermo:
         self.lose_acks = False  # pretend the Master's acks never arrive
         self.connected = True
         self.write_delay = 0.0  # like the transport waiting out the write gap
+        # the real controller, right after its report was acked, acks a new
+        # request but never reports it (captures/ha.log: rooms 1 and 3)
+        self.busy_after_ack = 0.0
+        self._busy_until = 0.0
         self.sent: list[Packet] = []  # everything the Master wrote
         self.emit: Callable[[bytes], None] = lambda data: None  # bytes towards the Master
         self._unacked: dict[int, Packet] = {}
@@ -49,6 +53,7 @@ class FakeThermo:
         if packet.kind is Kind.ACK:
             if not self.lose_acks:
                 self._unacked.pop(packet.dest.sub, None)
+                self._busy_until = asyncio.get_running_loop().time() + self.busy_after_ack
             return
         room = packet.dest.sub
         if packet.dest.device != thermo(0).device or room not in self.rooms:
@@ -61,8 +66,11 @@ class FakeThermo:
         self._later(self._answer(packet, room))
 
     async def _answer(self, request: Packet, room: int) -> None:
+        busy = asyncio.get_running_loop().time() < self._busy_until
         await asyncio.sleep(STEP)
         self.emit(request.ack().to_bytes())
+        if busy:
+            return  # acked, but the report never comes
         await asyncio.sleep(STEP)
         await self.report(room)
 

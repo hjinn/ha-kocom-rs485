@@ -101,6 +101,7 @@ Integration이 아무것도 보내지 않아도 **Room 상태가 바뀌면 Therm
 4. ACK가 없으면 seq `d` → `e` → `f`로 재송신한다. 4번 모두 실패하면 명령 실패.
 5. **③ 상태 보고 대기**: 출발지 = 대상 Thermo, 목적지 = Master, 타입 send, cmd `00`. 받으면 즉시 **④ ACK** 를 보낸다. **④가 없으면 명령이 약 3초 뒤 되돌려진다.** 재송신(d, e)이 오면 그것에도 ACK한다.
 6. 한 번에 하나의 요청만 진행한다 (직렬화).
+7. **Report에 ACK한 뒤 1초 동안 다음 요청을 보내지 않는다** (ADR-0018). 그 사이에 보낸 요청은 Controller가 ②로 받기만 하고 ③을 보내지 않는다 (`captures/ha.log`: 방을 연달아 조회하면 바로 앞 방이 응답한 직후의 방만 매번 `acked but did not report`). 참조 구현과 `probe.py scan`은 방 사이에 1초를 쉬어 문제가 없었다.
 
 ## Polling
 

@@ -21,6 +21,7 @@ async def discover_rooms(
     initial_quiet: float = 1.0,
     ack_timeout: float = 0.5,
     report_timeout: float = 1.2,
+    request_gap: float = 1.0,
 ) -> list[int]:
     """Connect to the EW11, query every room once and return those that answered."""
     connected = asyncio.Event()
@@ -45,6 +46,7 @@ async def discover_rooms(
         on_report=lambda room, state: None,
         ack_timeout=ack_timeout,
         report_timeout=report_timeout,
+        request_gap=request_gap,
     )
     await transport.start()
     try:

@@ -18,12 +18,9 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, ROOM_KEYS
 from .coordinator import KocomConfigEntry, KocomCoordinator
 from .protocol import ThermoMode, ThermoState
-
-# sub id -> key for entity id, unique id and translated name
-ROOM_KEYS = {0: "livingroom", 1: "bedroom", 2: "room1", 3: "room2"}
 
 PARALLEL_UPDATES = 0  # the Master already puts one request at a time on the bus
 

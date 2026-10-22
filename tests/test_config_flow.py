@@ -13,7 +13,13 @@ from custom_components.kocom_rs485.const import DOMAIN
 
 pytestmark = pytest.mark.usefixtures("socket_enabled")
 
-FAST = {"connect_timeout": 0.3, "initial_quiet": 0, "ack_timeout": 0.05, "report_timeout": 0.2}
+FAST = {
+    "connect_timeout": 0.3,
+    "initial_quiet": 0,
+    "ack_timeout": 0.05,
+    "report_timeout": 0.2,
+    "request_gap": 0.05,
+}
 
 
 @pytest.fixture(autouse=True)

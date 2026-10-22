@@ -16,7 +16,7 @@ from custom_components.kocom_rs485.protocol import (
 
 from .fakes import STEP, FakeThermo
 
-FAST = {"ack_timeout": 0.05, "report_timeout": 0.2}
+FAST = {"ack_timeout": 0.05, "report_timeout": 0.2, "request_gap": 0.15}
 
 
 @pytest.fixture
@@ -207,3 +207,34 @@ async def test_stale_report_before_ack_is_not_taken_as_the_result(make_master):
     state = await pending
 
     assert state == ThermoState(ThermoMode.HEAT, target_temp=24, current_temp=25)
+
+
+async def test_unobserved_report_value_fails_the_waiting_request_at_once(make_master):
+    # the room is in a state never captured on the real controller
+    master, fake = make_master({0: "2100180019000000"}, report_timeout=5)
+
+    with pytest.raises(NoResponse, match="unobserved value 2100180019000000"):
+        await asyncio.wait_for(master.query(0), 1)
+
+
+async def test_next_request_waits_until_the_thermo_is_ready_after_a_report(make_master):
+    # back-to-back queries made rooms 1 and 3 fail on the real controller
+    master, fake = make_master({0: "1100180019000000", 1: "11010a001a000000"})
+    fake.busy_after_ack = 0.1
+
+    await master.query(0)
+    state = await master.query(1)  # right after room 0's report was acked
+
+    assert state == ThermoState(ThermoMode.AWAY, None, 26)
+
+
+async def test_report_during_the_request_gap_is_not_the_next_answer(make_master):
+    master, fake = make_master({0: "1100180019000000"}, request_gap=0.1)
+    await master.query(0)
+
+    pending = asyncio.create_task(master.command(0, ThermoMode.AWAY))
+    await asyncio.sleep(0.02)  # the command is still waiting out the gap
+    stale = Packet(Kind.SEND, 2, MASTER, thermo(0), Cmd.STATE, bytes.fromhex("1100180019000000"))
+    master.feed(stale.to_bytes())
+
+    assert (await pending).mode is ThermoMode.AWAY

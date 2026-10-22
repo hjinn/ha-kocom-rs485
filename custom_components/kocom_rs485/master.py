@@ -41,11 +41,15 @@ class Master:
         *,
         ack_timeout: float = 0.5,
         report_timeout: float = 1.2,
+        request_gap: float = 1.0,
     ) -> None:
         self._write = write
         self._on_report = on_report
         self._ack_timeout = ack_timeout
         self._report_timeout = report_timeout
+        self._request_gap = request_gap
+        self._ready_at = 0.0  # loop time when the thermo takes requests again
+        self.last_wait = 0.0  # seconds the last request was held back (ADR-0018)
         self._framer = Framer()
         self._report: asyncio.Future[ThermoState] | None = None
         self._room: int | None = None
@@ -75,23 +79,34 @@ class Master:
 
     def _handle_report(self, packet: Packet) -> None:
         self._send_soon(packet.ack())
+        self._hold_requests()  # also keeps a request from going out before the ack
         room = packet.src.sub
-        try:
-            state = ThermoState.decode(packet.value)
-        except UnknownThermoValue:
-            _LOGGER.warning("ignoring report from room %s: unobserved value %s", room, packet.value.hex())
-            return
-        self._on_report(room, state)
         # only a report after the thermo acked our request is its answer; one
         # before it is a resend of something older (the real thermo always
         # acks at ~125ms and reports at ~300ms, docs/protocol.md)
-        if (
+        answers_request = (
             self._report is not None
             and not self._report.done()
             and room == self._room
             and self._acked.is_set()
-        ):
+        )
+        try:
+            state = ThermoState.decode(packet.value)
+        except UnknownThermoValue:
+            _LOGGER.warning("ignoring report from room %s: unobserved value %s", room, packet.value.hex())
+            if answers_request:  # fail now with the reason instead of timing out
+                self._report.set_exception(
+                    NoResponse(f"room {room} reported unobserved value {packet.value.hex()}")
+                )
+            return
+        self._on_report(room, state)
+        if answers_request:
             self._report.set_result(state)
+
+    def _hold_requests(self) -> None:
+        # right after a report was acked the controller acks new requests but
+        # does not report them (captures/ha.log); give it time, as kocom.py's 1s did
+        self._ready_at = asyncio.get_running_loop().time() + self._request_gap
 
     def _send_soon(self, packet: Packet) -> None:
         task = asyncio.get_running_loop().create_task(self._send_ack(packet))
@@ -101,6 +116,8 @@ class Master:
     async def _send_ack(self, packet: Packet) -> None:
         try:
             await self._write(packet.to_bytes())
+            # the controller's busy time starts when it gets our ack
+            self._hold_requests()
         except TransportNotConnected:
             _LOGGER.debug("could not ack report from room %s: not connected", packet.dest.sub)
 
@@ -119,10 +136,16 @@ class Master:
             return await self._exchange(room, cmd, value)
 
     async def _exchange(self, room: int, cmd: int, value: bytes) -> ThermoState:
+        self._acked.clear()  # still set from the previous exchange otherwise
+        self.last_wait = 0.0
         self._room = room
         self._report = asyncio.get_running_loop().create_future()
         try:
             for seq in SEQS:
+                # re-check: an ack written meanwhile moves the hold further out
+                while (wait := self._ready_at - asyncio.get_running_loop().time()) > 0:
+                    self.last_wait += wait
+                    await asyncio.sleep(wait)
                 request = Packet(Kind.SEND, seq, thermo(room), MASTER, cmd, value)
                 self._expected_ack = request.ack()
                 self._acked.clear()
@@ -143,6 +166,7 @@ class Master:
                 raise NoResponse(f"room {room} acked but did not report") from None
         finally:
             self._expected_ack = None
+            self._acked.clear()
             self._report = None
             self._room = None
 

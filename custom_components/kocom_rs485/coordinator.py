@@ -13,7 +13,7 @@ from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .const import CONF_ROOMS, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .const import CONF_ROOMS, CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN, ROOM_KEYS
 from .master import Master, NoResponse
 from .protocol import ThermoMode, ThermoState
 from .transport import TcpTransport
@@ -33,6 +33,7 @@ class RoomData:
     state: ThermoState | None = None
     available: bool = False
     misses: int = 0  # consecutive polls without an answer
+    lost: bool = False  # unavailable because of misses; logged once each way
     heat_temp: int = DEFAULT_HEAT_TEMP  # last heating setpoint seen (ADR-0005)
     reported_at: datetime | None = None  # last report that changed the state
 
@@ -141,16 +142,36 @@ class KocomCoordinator(DataUpdateCoordinator[dict[int, RoomData]]):
             room_data.heat_temp = state.target_temp
         room_data.available = True
         room_data.misses = 0
+        if room_data.lost:
+            room_data.lost = False
+            _LOGGER.info("room %s (%s) available again", room, ROOM_KEYS[room])
 
     async def _async_update_data(self) -> dict[int, RoomData]:
         now = dt_util.utcnow()
         for room, room_data in self.data.items():
             if room_data.reported_at and now - room_data.reported_at < self.update_interval:
                 continue  # reported on its own recently (ADR-0015)
+            started = self.hass.loop.time()
             try:
-                self._apply(room, await self.master.query(room))
-            except NoResponse:
+                state = await self.master.query(room)
+            except NoResponse as err:
                 room_data.misses += 1
-                if room_data.misses >= MISSES_UNTIL_UNAVAILABLE:
+                _LOGGER.debug(
+                    "room %s (%s) missed poll %s/%s: %s",
+                    room, ROOM_KEYS[room], room_data.misses, MISSES_UNTIL_UNAVAILABLE, err,
+                )
+                if room_data.misses >= MISSES_UNTIL_UNAVAILABLE and not room_data.lost:
+                    room_data.lost = True
                     room_data.available = False
+                    _LOGGER.warning(
+                        "room %s (%s) unavailable after %s missed polls: %s",
+                        room, ROOM_KEYS[room], room_data.misses, err,
+                    )
+            else:
+                waited = self.master.last_wait
+                _LOGGER.debug(
+                    "room %s (%s) answered in %.2fs (waited %.2fs for the controller)",
+                    room, ROOM_KEYS[room], self.hass.loop.time() - started - waited, waited,
+                )
+                self._apply(room, state)
         return self.data

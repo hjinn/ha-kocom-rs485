@@ -19,7 +19,9 @@ def fast_bus(monkeypatch):
         "TRANSPORT_OPTIONS",
         {"initial_quiet": 0, "connect_timeout": 0.3, "delays": lambda attempt: 0.05},
     )
-    monkeypatch.setattr(coordinator_module, "MASTER_OPTIONS", {"ack_timeout": 0.05, "report_timeout": 0.2})
+    monkeypatch.setattr(
+        coordinator_module, "MASTER_OPTIONS", {"ack_timeout": 0.05, "report_timeout": 0.2, "request_gap": 0.05}
+    )
     monkeypatch.setattr(coordinator_module, "CONNECT_TIMEOUT", 0.3)
 
 

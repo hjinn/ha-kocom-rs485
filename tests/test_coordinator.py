@@ -1,5 +1,7 @@
 """Tests for the coordinator, set up through Home Assistant against a fake EW11."""
 import asyncio
+import logging
+import re
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -220,3 +222,83 @@ async def test_unload_flushes_acks_and_closes_the_connection(hass: HomeAssistant
 
     assert len(fake.thermo.acks_to(0)) > acks_before  # the command's report was acked
     assert not coordinator.transport.connected
+
+
+def coordinator_logs(caplog, level: int) -> list[str]:
+    return [
+        r.getMessage() for r in caplog.records
+        if r.name == "custom_components.kocom_rs485.coordinator" and r.levelno == level
+    ]
+
+
+@pytest.mark.freeze_time("2026-10-22 12:00:00", tick=True)
+async def test_logs_room_going_unavailable_once_with_reason_and_recovery(
+    hass: HomeAssistant, controller, freezer, caplog
+):
+    caplog.set_level(logging.DEBUG, logger="custom_components.kocom_rs485")
+    fake = await controller({0: "1100180019000000", 2: "1100170019000000"})
+    entry = await setup_entry(hass, fake.port, [0, 2])
+    coordinator = entry.runtime_data
+    unsubscribe = coordinator.async_add_listener(lambda: None)
+    room2 = fake.thermo.rooms.pop(2)
+
+    for misses in (1, 2, 3):  # the third miss must not warn again
+        await advance(hass, freezer, 61)
+        await eventually(lambda: coordinator.data[2].misses == misses)
+
+    warnings = coordinator_logs(caplog, logging.WARNING)
+    assert warnings == ["room 2 (room1) unavailable after 2 missed polls: room 2 did not ack 4 tries"]
+
+    fake.thermo.rooms[2] = room2
+    await fake.thermo.report(2)
+    await eventually(lambda: coordinator.data[2].available)
+    assert coordinator_logs(caplog, logging.INFO) == ["room 2 (room1) available again"]
+    unsubscribe()
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.freeze_time("2026-10-22 12:00:00", tick=True)
+async def test_debug_log_per_poll_shows_answer_time_or_miss_reason(
+    hass: HomeAssistant, controller, freezer, caplog
+):
+    caplog.set_level(logging.DEBUG, logger="custom_components.kocom_rs485")
+    fake = await controller({0: "1100180019000000", 1: "1100170019000000", 2: "1100170019000000"})
+    entry = await setup_entry(hass, fake.port, [0, 1, 2])
+    coordinator = entry.runtime_data
+    unsubscribe = coordinator.async_add_listener(lambda: None)
+    del fake.thermo.rooms[2]
+    caplog.clear()
+
+    await advance(hass, freezer, 61)
+    await eventually(lambda: coordinator.data[2].misses == 1)
+
+    debug = coordinator_logs(caplog, logging.DEBUG)
+    answered = {
+        int(m["room"]): (float(m["answer"]), float(m["wait"]))
+        for line in debug
+        if (m := re.fullmatch(
+            r"room (?P<room>\d) \(\w+\) answered in (?P<answer>\d+\.\d\d)s"
+            r" \(waited (?P<wait>\d+\.\d\d)s for the controller\)",
+            line,
+        ))
+    }
+    assert answered[0][1] == 0  # first of the poll: nothing to wait for
+    assert answered[1][1] >= 0.04  # held back after room 0's report (request_gap 0.05)
+    assert answered[1][0] < 0.04  # the answer itself is as quick as room 0's
+    assert "room 2 (room1) missed poll 1/2: room 2 did not ack 4 tries" in debug
+    unsubscribe()
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_all_rooms_answer_although_the_controller_is_busy_after_each_report(
+    hass: HomeAssistant, controller
+):
+    # captures/ha.log: polled back to back, rooms 1 and 3 never reported
+    fake = await controller({room: "1100180019000000" for room in (0, 1, 2, 3)})
+    fake.thermo.busy_after_ack = 0.03
+
+    entry = await setup_entry(hass, fake.port, [0, 1, 2, 3])
+
+    coordinator = entry.runtime_data
+    assert {room: data.misses for room, data in coordinator.data.items()} == {0: 0, 1: 0, 2: 0, 3: 0}
+    await hass.config_entries.async_unload(entry.entry_id)
