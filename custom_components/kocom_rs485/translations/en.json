@@ -54,16 +54,48 @@
   "entity": {
     "climate": {
       "livingroom": {
-        "name": "Living room"
+        "name": "Living room",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "Home",
+              "away": "Away"
+            }
+          }
+        }
       },
       "bedroom": {
-        "name": "Bedroom"
+        "name": "Bedroom",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "Home",
+              "away": "Away"
+            }
+          }
+        }
       },
       "room1": {
-        "name": "Room 1"
+        "name": "Room 1",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "Home",
+              "away": "Away"
+            }
+          }
+        }
       },
       "room2": {
-        "name": "Room 2"
+        "name": "Room 2",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "Home",
+              "away": "Away"
+            }
+          }
+        }
       }
     }
   },

@@ -54,16 +54,48 @@
   "entity": {
     "climate": {
       "livingroom": {
-        "name": "거실"
+        "name": "거실",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "재실",
+              "away": "외출"
+            }
+          }
+        }
       },
       "bedroom": {
-        "name": "안방"
+        "name": "안방",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "재실",
+              "away": "외출"
+            }
+          }
+        }
       },
       "room1": {
-        "name": "방1"
+        "name": "방1",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "재실",
+              "away": "외출"
+            }
+          }
+        }
       },
       "room2": {
-        "name": "방2"
+        "name": "방2",
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "home": "재실",
+              "away": "외출"
+            }
+          }
+        }
       }
     }
   },

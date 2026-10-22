@@ -6,6 +6,7 @@ from homeassistant.components.climate import (
     ATTR_MAX_TEMP,
     ATTR_MIN_TEMP,
     ATTR_PRESET_MODE,
+    ATTR_PRESET_MODES,
     ATTR_TARGET_TEMP_STEP,
     DOMAIN as CLIMATE,
     SERVICE_SET_HVAC_MODE,
@@ -46,7 +47,8 @@ async def test_one_heater_per_room_showing_off_heat_and_away(hass: HomeAssistant
     assert living.state == HVACMode.HEAT
     assert living.attributes[ATTR_TEMPERATURE] == 24
     assert living.attributes[ATTR_CURRENT_TEMPERATURE] == 25
-    assert living.attributes[ATTR_PRESET_MODE] == "none"
+    assert living.attributes[ATTR_PRESET_MODE] == "home"
+    assert living.attributes[ATTR_PRESET_MODES] == ["home", "away"]
     assert living.attributes[ATTR_MIN_TEMP] == 5
     assert living.attributes[ATTR_MAX_TEMP] == 40
     assert living.attributes[ATTR_TARGET_TEMP_STEP] == 1
@@ -61,6 +63,7 @@ async def test_one_heater_per_room_showing_off_heat_and_away(hass: HomeAssistant
     room2 = hass.states.get(ROOM2)
     assert room2.state == HVACMode.OFF
     assert room2.attributes[ATTR_TEMPERATURE] is None
+    assert room2.attributes[ATTR_PRESET_MODE] is None  # neither home nor away while off
 
     assert hass.states.get(ROOM1) is None  # not configured
     await hass.config_entries.async_unload(entry.entry_id)
@@ -117,10 +120,10 @@ async def test_away_preset_on_and_off(hass: HomeAssistant, controller):
     assert hass.states.get(LIVING).attributes[ATTR_PRESET_MODE] == "away"
 
     await hass.services.async_call(
-        CLIMATE, SERVICE_SET_PRESET_MODE, {ATTR_ENTITY_ID: LIVING, ATTR_PRESET_MODE: "none"}, blocking=True
+        CLIMATE, SERVICE_SET_PRESET_MODE, {ATTR_ENTITY_ID: LIVING, ATTR_PRESET_MODE: "home"}, blocking=True
     )
     state = hass.states.get(LIVING)
-    assert state.attributes[ATTR_PRESET_MODE] == "none"
+    assert state.attributes[ATTR_PRESET_MODE] == "home"
     assert state.attributes[ATTR_TEMPERATURE] == 24
     assert sent_values(fake, 0) == ["11010a0000000000", "1100180000000000"]
     await hass.config_entries.async_unload(entry.entry_id)
@@ -162,4 +165,33 @@ async def test_names_in_korean(hass: HomeAssistant, controller):
 
     assert hass.states.get(LIVING).attributes[ATTR_FRIENDLY_NAME] == "난방 거실"
     assert hass.states.get(BEDROOM).attributes[ATTR_FRIENDLY_NAME] == "난방 안방"
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_home_preset_turns_heating_on_from_off(hass: HomeAssistant, controller):
+    fake = await controller({3: "00010a0019000000"})  # off
+    entry = await setup_entry(hass, fake.port, [3])
+
+    await hass.services.async_call(
+        CLIMATE, SERVICE_SET_PRESET_MODE, {ATTR_ENTITY_ID: ROOM2, ATTR_PRESET_MODE: "home"}, blocking=True
+    )
+
+    state = hass.states.get(ROOM2)
+    assert state.state == HVACMode.HEAT
+    assert state.attributes[ATTR_PRESET_MODE] == "home"
+    assert sent_values(fake, 3) == ["1100170000000000"]  # 23 C: never seen heating
+    await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.parametrize(("language", "home", "away"), [("ko", "재실", "외출"), ("en", "Home", "Away")])
+async def test_preset_labels_are_translated(hass: HomeAssistant, controller, language, home, away):
+    from homeassistant.helpers.translation import async_get_translations
+
+    fake = await controller({0: "1100180019000000"})
+    entry = await setup_entry(hass, fake.port, [0])
+
+    strings = await async_get_translations(hass, language, "entity", ["kocom_rs485"])
+    prefix = "component.kocom_rs485.entity.climate.livingroom.state_attributes.preset_mode.state"
+    assert strings[f"{prefix}.home"] == home
+    assert strings[f"{prefix}.away"] == away
     await hass.config_entries.async_unload(entry.entry_id)

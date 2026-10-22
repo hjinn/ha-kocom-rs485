@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.components.climate import (
     ATTR_HVAC_MODE,
     PRESET_AWAY,
-    PRESET_NONE,
+    PRESET_HOME,
     ClimateEntity,
     ClimateEntityFeature,
     HVACMode,
@@ -37,7 +37,7 @@ async def async_setup_entry(
 class KocomHeater(CoordinatorEntity[KocomCoordinator], ClimateEntity):
     _attr_has_entity_name = True
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
-    _attr_preset_modes = [PRESET_NONE, PRESET_AWAY]
+    _attr_preset_modes = [PRESET_HOME, PRESET_AWAY]
     _attr_supported_features = (
         ClimateEntityFeature.TARGET_TEMPERATURE
         | ClimateEntityFeature.PRESET_MODE
@@ -81,9 +81,10 @@ class KocomHeater(CoordinatorEntity[KocomCoordinator], ClimateEntity):
 
     @property
     def preset_mode(self) -> str | None:
-        if self._state is None:
+        """Home while heating, away while away; none applies while off."""
+        if self._state is None or self._state.mode is ThermoMode.OFF:
             return None
-        return PRESET_AWAY if self._state.mode is ThermoMode.AWAY else PRESET_NONE
+        return PRESET_AWAY if self._state.mode is ThermoMode.AWAY else PRESET_HOME
 
     @property
     def target_temperature(self) -> float | None:
